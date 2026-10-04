@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Del caos al orden</title>
+<script>/* ?embed=1: solo la tarjeta grande, a pantalla completa (para incrustarla en un iframe) */
+if (/[?&]embed=1(&|$)/.test(location.search)) {
+  document.documentElement.classList.add('embed');
+  // dentro de la portada (iframe aislado): la rueda y las flechas mueven la página que la contiene
+  if (window.parent !== window) {
+    addEventListener('wheel', function (e) { e.preventDefault(); parent.postMessage({ sarare: 'wheel', dx: e.deltaX, dy: e.deltaY, mode: e.deltaMode }, '*'); }, { passive: false });
+    addEventListener('keydown', function (e) {
+      if (['ArrowDown', 'PageDown', ' ', 'ArrowUp', 'PageUp'].indexOf(e.key) < 0) return;
+      e.preventDefault(); parent.postMessage({ sarare: 'key', key: e.key }, '*');
+    });
+  }
+}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f0d; --card: #0f1412; --line: #1b2521;
+    --amber: #f0a23b; --amber-2: #f6c35b; --red: #e0663a; --green: #3fb68b;
+    --muted: #98a39e; --dim: #5f6b66; --ink: #f2f4f3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+    min-height: 100vh; padding: 64px 16px 80px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .eyebrow {
+    font: 500 12px/1 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--amber);
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--amber); opacity: .7; }
+  h1 {
+    font: 600 clamp(32px, 4.6vw, 50px)/1.06 Sora, sans-serif;
+    letter-spacing: -.03em; margin: 18px 0 14px;
+  }
+  .lead { color: var(--muted); font-size: 17px; line-height: 1.6; max-width: 620px; }
+
+  .stage {
+    position: relative; overflow: hidden; border-radius: 20px;
+    background: var(--card); border: 1px solid var(--line);
+    box-shadow: 0 40px 90px -50px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.035);
+    isolation: isolate;
+  }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+  .stage--lg { margin-top: 40px; aspect-ratio: 11 / 6; }
+  .stage--sm { width: 480px; max-width: 100%; aspect-ratio: 3 / 2; flex: none; }
+
+  .cap {
+    position: absolute; left: 22px; bottom: 18px; z-index: 2;
+    display: flex; align-items: center; gap: 10px; pointer-events: none;
+    font: 400 12px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .02em; color: var(--muted);
+  }
+  .cap i { display: none; }
+  .cap span { display: inline-block; transition: opacity .32s ease, transform .32s ease; }
+  .cap.swap span { opacity: 0; transform: translateY(4px); }
+  .stage--sm .cap { left: 16px; bottom: 13px; font-size: 11px; }
+
+  .hint {
+    position: absolute; right: 22px; bottom: 18px; z-index: 2; pointer-events: none;
+    font: 400 11px/1 'JetBrains Mono', ui-monospace, monospace; color: var(--dim);
+    opacity: 0; transition: opacity .8s ease;
+  }
+  .hint.on { opacity: 1; }
+  @media (hover: none) { .hint { display: none; } }
+
+  .row { margin-top: 48px; display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
+  .note { max-width: 380px; }
+  .note b { display: block; font: 500 12px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--amber); margin-bottom: 12px; }
+  .note p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+  @media (max-width: 560px) {
+    body { padding-top: 40px; }
+    .stage { border-radius: 16px; }
+    .stage--lg { aspect-ratio: 4 / 3; }
+    .cap { left: 16px; bottom: 13px; font-size: 11px; }
+    .hint { display: none; }
+  }
+
+  /* modo incrustado */
+  html.embed, html.embed body { width: 100%; height: 100%; overflow: hidden; }
+  html.embed body { min-height: 0; padding: 0; }
+  html.embed .wrap { max-width: none; height: 100%; }
+  html.embed .eyebrow, html.embed h1, html.embed .lead, html.embed .row { display: none; }
+  html.embed .stage--lg { margin: 0; aspect-ratio: auto; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  html.embed .cap { left: 16px; bottom: 13px; font-size: 11px; }
+  html.embed .hint { right: 16px; bottom: 13px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow">Sarare Tech · animación</p>
+  <h1>Del caos al orden</h1>
+  <p class="lead">Miles de datos sueltos se ordenan solos hasta formar nuestro logo: eso es lo que hacemos con la información de tu empresa.</p>
+
+  <section class="stage stage--lg" data-caos>
+    <canvas role="img" aria-label="Partículas dispersas que se ordenan y forman el logo de Sarare Tech"></canvas>
+    <div class="cap"><i></i><span>datos sueltos</span></div>
+    <div class="hint">pasa el cursor por el logo</div>
+  </section>
+
+  <div class="row">
+    <section class="stage stage--sm" data-caos>
+      <canvas role="img" aria-label="Versión pequeña de la animación del caos al orden"></canvas>
+      <div class="cap"><i></i><span>datos sueltos</span></div>
+    </section>
+    <div class="note">
+      <b>Escala pequeña · 480 × 320</b>
+      <p>La misma animación recalcula la cantidad de partículas, su tamaño y la densidad del muestreo según la tarjeta, para que el logo se lea nítido en cualquier tamaño.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- Paleta "Atardecer llanero" ---------- */
+  const COLS = [];
+  const C = {};
+  const addCol = (name, rgb) => { C[name] = COLS.length; COLS.push(rgb); };
+
+  addCol('AMBER',  [240, 162, 59]);
+  addCol('LAMBER', [246, 195, 91]);
+  addCol('RED',    [224, 102, 58]);
+  addCol('GREEN',  [63, 182, 139]);
+  addCol('GRAY',   [152, 163, 158]);
+  addCol('GRAYD',  [88, 100, 95]);
+  addCol('SWEEP',  [255, 249, 238]);
+  addCol('LIGHT',  [242, 244, 243]);   // anillo y "SARARE"
+  addCol('CTOP',   [248, 207, 106]);   // cara superior del cubo
+  // Roles del logo oficial (assets/logo-sarare.svg): 0 anillo · 1 cara sup. · 2 cara izq. · 3 cara der. · 4 SARARE · 5 TECH
+  const ROLE_COL = [C.LIGHT, C.CTOP, C.AMBER, C.RED, C.LIGHT, C.AMBER];
+  const ROLE_CLASS = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+  const CLASS_ROLE = [-1, 2, 1, 5, 0, 4, 3, -1];   // índice = (r>127)<<2 | (g>127)<<1 | (b>127)
+  const ROLE_GLOW = ['rgba(242,244,243,.5)', 'rgba(248,207,106,.9)', 'rgba(240,162,59,.9)', 'rgba(224,102,58,.9)', 'rgba(242,244,243,.45)', 'rgba(240,162,59,.85)'];
+  const CHAOS_PICK = [[C.AMBER, .30], [C.GREEN, .24], [C.GRAY, .24], [C.GRAYD, .08], [C.RED, .07], [C.LAMBER, .07]];
+  const pickChaos = () => {
+    let r = Math.random();
+    for (const [c, w] of CHAOS_PICK) { if ((r -= w) <= 0) return c; }
+    return C.GRAY;
+  };
+
+  /* ---------- Línea de tiempo (segundos) ---------- */
+  const CYCLE = 12.4;
+  const PH = [0, 2.6, 5.4, 10.6];   // 0 caos · 1 se arma el logo · 2 logo formado (respira) · 3 se disuelve
+  const CAPS = ['datos sueltos', 'sarare tech · software, datos e IA'];
+  const phaseOf = l => (l >= PH[3] ? 3 : l >= PH[2] ? 2 : l >= PH[1] ? 1 : 0);
+  const capOf = l => (l < PH[1] + 1.9 ? 0 : l < PH[3] ? 1 : 0);
+  const ease = t => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  const reduceMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const COLF = new Float32Array(COLS.length * 3);
+  COLS.forEach((c, i) => { COLF[i * 3] = c[0] / 255; COLF[i * 3 + 1] = c[1] / 255; COLF[i * 3 + 2] = c[2] / 255; });
+  const STRIDE = 7;   // x, y, tamaño, r, g, b, alfa
+
+  /* ---------- Render WebGL: puntos con mezcla aditiva (una sola llamada de dibujo) ---------- */
+  const VS_PT = `attribute vec2 a_pos; attribute float a_size; attribute vec4 a_col;
+uniform vec2 u_res; uniform float u_dpr; varying vec4 v_col;
+void main() {
+  vec2 c = a_pos / u_res * 2.0 - 1.0;
+  gl_Position = vec4(c.x, -c.y, 0.0, 1.0);
+  gl_PointSize = a_size * u_dpr;
+  v_col = a_col;
+}`;
+  const FS_PT = `precision mediump float; varying vec4 v_col;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0;
+  float core = 1.0 - smoothstep(0.36, 0.62, d);
+  float h = max(0.0, 1.0 - d);
+  float k = max(core, h * h * 0.42);
+  if (k < 0.004) discard;
+  gl_FragColor = vec4(v_col.rgb * (v_col.a * k), 1.0);
+}`;
+  const VS_Q = `attribute vec2 a_q; varying vec2 v_uv;
+void main() { v_uv = a_q * 0.5 + 0.5; gl_Position = vec4(a_q, 0.0, 1.0); }`;
+  const FS_Q = `precision mediump float; uniform sampler2D u_tex; uniform float u_a; uniform float u_add; varying vec2 v_uv;
+void main() {
+  vec4 t = texture2D(u_tex, v_uv);
+  gl_FragColor = u_add > 0.5 ? vec4(t.rgb * u_a, 1.0) : vec4(t.rgb, u_a);
+}`;
+
+  class GLR {
+    constructor(cv) {
+      const gl = cv.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+      if (!gl) throw new Error('WebGL no disponible');
+      this.gl = gl;
+      this.init();
+    }
+    shader(type, src) {
+      const gl = this.gl, s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('Shader: ' + gl.getShaderInfoLog(s));
+      return s;
+    }
+    program(vs, fs) {
+      const gl = this.gl, p = gl.createProgram();
+      gl.attachShader(p, this.shader(gl.VERTEX_SHADER, vs)); gl.attachShader(p, this.shader(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Programa: ' + gl.getProgramInfoLog(p));
+      return p;
+    }
+    init() {
+      const gl = this.gl;
+      this.pP = this.program(VS_PT, FS_PT);
+      this.pQ = this.program(VS_Q, FS_Q);
+      this.aPos = gl.getAttribLocation(this.pP, 'a_pos'); this.aSize = gl.getAttribLocation(this.pP, 'a_size'); this.aCol = gl.getAttribLocation(this.pP, 'a_col');
+      this.uRes = gl.getUniformLocation(this.pP, 'u_res'); this.uDpr = gl.getUniformLocation(this.pP, 'u_dpr');
+      this.aQ = gl.getAttribLocation(this.pQ, 'a_q');
+      this.uTex = gl.getUniformLocation(this.pQ, 'u_tex'); this.uA = gl.getUniformLocation(this.pQ, 'u_a'); this.uAdd = gl.getUniformLocation(this.pQ, 'u_add');
+      this.qBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.qBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      this.pBuf = gl.createBuffer(); this.cap = 0;
+      this.tex = {};
+      gl.enable(gl.BLEND);
+      gl.disable(gl.DEPTH_TEST);
+    }
+    texture(name, canvas) {
+      const gl = this.gl;
+      const t = this.tex[name] || (this.tex[name] = gl.createTexture());
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    reserve(bytes) {
+      const gl = this.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.pBuf);
+      if (bytes > this.cap) { gl.bufferData(gl.ARRAY_BUFFER, bytes, gl.DYNAMIC_DRAW); this.cap = bytes; }
+    }
+    begin(w, h) { this.gl.viewport(0, 0, w, h); }
+    quad(name, alpha, additive) {
+      const gl = this.gl;
+      gl.useProgram(this.pQ);
+      if (additive) gl.blendFunc(gl.ONE, gl.ONE); else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex[name]);
+      gl.uniform1i(this.uTex, 0); gl.uniform1f(this.uA, alpha); gl.uniform1f(this.uAdd, additive ? 1 : 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.qBuf);
+      gl.enableVertexAttribArray(this.aQ);
+      gl.vertexAttribPointer(this.aQ, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.disableVertexAttribArray(this.aQ);
+    }
+    points(buf, count, W, H, dpr) {
+      if (!count) return;
+      const gl = this.gl, B = STRIDE * 4;
+      gl.useProgram(this.pP);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.uniform2f(this.uRes, W, H); gl.uniform1f(this.uDpr, dpr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.pBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf);
+      gl.enableVertexAttribArray(this.aPos); gl.enableVertexAttribArray(this.aSize); gl.enableVertexAttribArray(this.aCol);
+      gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, B, 0);
+      gl.vertexAttribPointer(this.aSize, 1, gl.FLOAT, false, B, 8);
+      gl.vertexAttribPointer(this.aCol, 4, gl.FLOAT, false, B, 12);
+      gl.drawArrays(gl.POINTS, 0, count);
+      gl.disableVertexAttribArray(this.aPos); gl.disableVertexAttribArray(this.aSize); gl.disableVertexAttribArray(this.aCol);
+    }
+  }
+
+  let LOGO = null;   // { vb, parts } — se carga del SVG oficial antes de arrancar
+
+  class CaosAlOrden {
+    constructor(root) {
+      this.root = root;
+      this.cv = root.querySelector('canvas');
+      this.R = null; this.ctx = null; this.lost = false;
+      try { this.R = new GLR(this.cv); }
+      catch (err) {
+        console.warn('caos-al-orden: WebGL no disponible, se usa Canvas 2D (más lento)', err);
+        this.ctx = this.cv.getContext('2d');
+      }
+      if (this.R) {
+        this.cv.addEventListener('webglcontextlost', e => {
+          e.preventDefault(); console.warn('caos-al-orden: se perdió el contexto WebGL; se espera su restauración');
+          this.lost = true; this.stop();
+        });
+        this.cv.addEventListener('webglcontextrestored', () => {
+          console.warn('caos-al-orden: contexto WebGL restaurado');
+          this.lost = false;
+          try { this.R.init(); this.R.cap = 0; } catch (err) { console.error('caos-al-orden: no se pudo reiniciar WebGL', err); return; }
+          this.build();
+          if (this.reduced) this.renderStatic(); else { this.resumeAfterRebuild(); this.start(); }
+        });
+      }
+      this.capEl = root.querySelector('.cap');
+      this.capSpan = this.capEl.querySelector('span');
+      this.hint = root.querySelector('.hint');
+      this.T = 0; this.phase = -1; this.cap = -1; this.N = 0;
+      this.mx = 0; this.my = 0; this.mOn = false;
+      this.running = false; this.visible = true; this.paused = false; this.last = 0;
+      this.calm = 1; this.glow = 0; this.trail = 1; this.sweepT0 = -1e9;
+      this.reduced = reduceMQ.matches;
+      this.loop = this.loop.bind(this);
+
+      const pos = e => { const r = this.cv.getBoundingClientRect(); this.mx = e.clientX - r.left; this.my = e.clientY - r.top; };
+      this.cv.addEventListener('pointermove', e => { pos(e); this.mOn = true; });
+      this.cv.addEventListener('pointerdown', e => { pos(e); this.mOn = true; });
+      this.cv.addEventListener('pointerleave', () => { this.mOn = false; });
+      this.cv.addEventListener('pointercancel', () => { this.mOn = false; });
+    }
+
+    /* ---------- Construcción (en cada cambio de tamaño) ---------- */
+    build() {
+      const r = this.root.getBoundingClientRect();
+      const W = Math.max(220, Math.round(r.width)), H = Math.max(150, Math.round(r.height));
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      this.W = W; this.H = H; this.dpr = dpr;
+      this.cv.width = Math.round(W * dpr); this.cv.height = Math.round(H * dpr);
+      this.sc = (W + H) / 1700;
+      this.layout();
+      this.sampleText();
+      this.alloc();
+      this.buildBackdrop();
+      this.buildGlow();
+      if (this.R) {
+        this.buf = new Float32Array(this.N * STRIDE);
+        this.R.reserve(this.buf.byteLength);
+        this.R.texture('bg', this.bg);
+        this.R.texture('glow', this.glowC);
+        this.R.texture('fill', this.fillC);
+      } else this.buildSprites();
+      this.initParticles();
+    }
+
+    clear() {
+      if (this.R) { this.R.begin(this.cv.width, this.cv.height); this.R.quad('bg', 1, false); return; }
+      const ctx = this.ctx;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(this.bg, 0, 0);
+    }
+
+    // Logo horizontal oficial, escalado y centrado en la tarjeta (mismas proporciones que el SVG)
+    layout() {
+      const W = this.W, H = this.H, vb = LOGO.vb;
+      const lw = vb[2], lh = vb[3];
+      const frac = W < 560 ? 0.86 : W < 760 ? 0.8 : 0.74;
+      const s = Math.min(W * frac / lw, H * 0.42 / lh);
+      const x0 = (W - lw * s) / 2, y0 = H * 0.47 - lh * s / 2;
+      this.L = {
+        s, x0, y0, wLogo: lw * s, top: y0, bot: y0 + lh * s,
+        F: 100 * s,                     // escala de referencia (altura de mayúscula ≈ 0.71·F)
+        cx: W / 2, cy: y0 + lh * s / 2, vx: vb[0], vy: vb[1],
+      };
+    }
+
+    // mode: 'class' (colores planos por rol, para clasificar), 'real' (colores del logo), 'glow' (solo sombra)
+    drawLogo(g, mode) {
+      const L = this.L, cls = mode === 'class', glow = mode === 'glow';
+      g.save();
+      g.translate(L.x0, L.y0); g.scale(L.s, L.s); g.translate(-L.vx, -L.vy);
+      for (const p of LOGO.parts) {
+        g.save();
+        g.translate(p.tx, p.ty);
+        if (cls) g.fillStyle = ROLE_CLASS[p.role];
+        else { g.fillStyle = p.fill; if (glow) g.shadowColor = ROLE_GLOW[p.role]; }
+        g.fill(p.path);
+        g.restore();
+      }
+      g.restore();
+    }
+
+    sampleText() {
+      const W = this.W, H = this.H, L = this.L;
+      const oc = document.createElement('canvas'); oc.width = W; oc.height = H;
+      const g = oc.getContext('2d', { willReadFrequently: true });
+      this.drawLogo(g, 'class');
+      const d = g.getImageData(0, 0, W, H).data;
+      const TH = 110;
+      let area = 0, minX = W, minY = H, maxX = 0, maxY = 0;
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        for (let x = 0; x < W; x++) {
+          if (d[(row + x) * 4 + 3] >= TH) {
+            area++;
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (area === 0) { console.error('caos-al-orden: no se pudo rasterizar el logotipo'); this.tpts = new Float32Array(0); this.Nt = 0; this.gstep = 3; this.rad = 1; return; }
+      // Paso de muestreo: lo bastante fino para los trazos delgados de "TECH" (8.2 u), con tope de partículas
+      const maxText = clamp(W * H * 0.012, 1800, 5200);
+      const minStep = W < 400 ? 1.4 : 1.5;
+      const step = Math.max(minStep, 3.0 * L.s, Math.sqrt(area / (maxText * 0.866)));
+      const rowH = step * 0.866;
+      const pts = [];
+      let j = 0;
+      for (let y = minY + rowH * 0.5; y <= maxY; y += rowH, j++) {
+        const off = (j & 1) ? step * 0.5 : 0;
+        const yi = y | 0;
+        for (let x = minX + off + step * 0.3; x <= maxX; x += step) {
+          const k = (yi * W + (x | 0)) * 4;
+          if (d[k + 3] < TH) continue;
+          const role = CLASS_ROLE[((d[k] > 127) << 2) | ((d[k + 1] > 127) << 1) | (d[k + 2] > 127)];
+          if (role < 0) continue;
+          pts.push(x, y, role);
+        }
+      }
+      this.gstep = step;
+      this.rad = clamp(step * 0.42, 0.72, 1.8);
+      // ordenar por x (las partículas del logo quedan indexadas de izquierda a derecha)
+      const n = pts.length / 3, idx = new Array(n);
+      for (let i = 0; i < n; i++) idx[i] = i;
+      idx.sort((a, b) => pts[a * 3] - pts[b * 3]);
+      const sorted = new Float32Array(n * 3);
+      idx.forEach((s, i) => { sorted[i * 3] = pts[s * 3]; sorted[i * 3 + 1] = pts[s * 3 + 1]; sorted[i * 3 + 2] = pts[s * 3 + 2]; });
+      this.tpts = sorted; this.Nt = n;
+    }
+
+    alloc() {
+      const Nt = this.Nt, Nd = Math.round(Nt * 0.3), N = Nt + Nd;
+      this.N = N; this.Nd = Nd;
+      const F = () => new Float32Array(N), U = () => new Uint8Array(N);
+      Object.assign(this, {
+        x: F(), y: F(), vx: F(), vy: F(), sx: F(), sy: F(), tx: F(), ty: F(), st: F(), du: F(), cvv: F(),
+        ox: F(), oy: F(), ovx: F(), ovy: F(), ba: F(), flk: F(), ph: F(), sz: F(), fs: F(), dim: F(), dimT: F(),
+        cs: F(), cd: F(), rel: F(), ntx: F(), nty: F(), nst: F(), ndu: F(),
+        txX: F(), txY: F(), txD: F(), rlD: F(),
+        mode: U(), ca: U(), cb: U(), cc: U(), ct: U(), noisy: U(),
+      });
+      const L = this.L, tp = this.tpts;
+      for (let i = 0; i < Nt; i++) {
+        const x = tp[i * 3], y = tp[i * 3 + 1], role = tp[i * 3 + 2];
+        this.txX[i] = x; this.txY[i] = y;
+        const fx = clamp((x - L.x0) / L.wLogo, 0, 1);
+        this.txD[i] = fx * 1.35 + Math.random() * 0.2;
+        this.rlD[i] = fx * 0.8 + Math.random() * 0.22;
+        this.ct[i] = ROLE_COL[role];
+        this.fs[i] = role === 5 ? 0.9 : 1;
+      }
+      for (let i = Nt; i < N; i++) this.fs[i] = 0.8;
+      this.mR = clamp(L.F * 0.8, 38, 120);
+      this.mF = 46 * this.mR;
+    }
+
+    initParticles() {
+      const W = this.W, H = this.H, sc = this.sc;
+      for (let i = 0; i < this.N; i++) {
+        this.x[i] = Math.random() * W; this.y[i] = Math.random() * H;
+        this.vx[i] = (Math.random() - .5) * 60 * sc; this.vy[i] = (Math.random() - .5) * 60 * sc;
+        this.mode[i] = 0;
+        const c = pickChaos(); this.cc[i] = c; this.ca[i] = c; this.cb[i] = c;
+        this.cs[i] = -1e9; this.cd[i] = 1;
+        const noisy = Math.random() < .16; this.noisy[i] = noisy ? 1 : 0;
+        this.ba[i] = 0.4 + Math.random() * 0.6;
+        this.flk[i] = noisy ? 7 + Math.random() * 16 : 0.5 + Math.random() * 2.2;
+        this.ph[i] = Math.random() * Math.PI * 2;
+        this.sz[i] = 0.6 + Math.pow(Math.random(), 3) * 1.35;
+        this.cvv[i] = (Math.random() - .5) * 0.55;
+        this.dim[i] = 1; this.dimT[i] = 1;
+        this.rel[i] = Infinity; this.nst[i] = Infinity;
+        this.ox[i] = this.oy[i] = this.ovx[i] = this.ovy[i] = 0;
+      }
+    }
+
+    buildSprites() {
+      const px = Math.max(8, Math.ceil(this.rad * 4 * this.dpr * 1.6));
+      this.spr = COLS.map(rgb => {
+        const c = document.createElement('canvas'); c.width = c.height = px;
+        const g = c.getContext('2d'), h = px / 2, s = rgb.join(',');
+        const gr = g.createRadialGradient(h, h, 0, h, h, h);
+        gr.addColorStop(0, `rgba(${s},1)`);
+        gr.addColorStop(0.36, `rgba(${s},.96)`);
+        gr.addColorStop(0.5, `rgba(${s},.42)`);
+        gr.addColorStop(0.72, `rgba(${s},.1)`);
+        gr.addColorStop(1, `rgba(${s},0)`);
+        g.fillStyle = gr; g.fillRect(0, 0, px, px);
+        return c;
+      });
+    }
+
+    buildBackdrop() {
+      const W = this.W, H = this.H, d = this.dpr, L = this.L;
+      const c = this.bg = document.createElement('canvas');   // lienzo nuevo: se lee una sola vez
+      c.width = Math.round(W * d); c.height = Math.round(H * d);
+      const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+      g.fillStyle = '#0f1412'; g.fillRect(0, 0, W, H);
+      const R = Math.max(W, H);
+      let gr = g.createRadialGradient(L.cx, L.cy, 0, L.cx, L.cy, R * .62);
+      gr.addColorStop(0, 'rgba(240,162,59,.045)'); gr.addColorStop(.5, 'rgba(63,182,139,.012)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      gr = g.createRadialGradient(W / 2, H / 2, R * .35, W / 2, H / 2, R * .8);
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.38)');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      // tramado (±1 nivel) para que los degradados oscuros no muestren bandas
+      const img = g.getImageData(0, 0, c.width, c.height), px = img.data;
+      for (let i = 0; i < px.length; i += 4) {
+        const n = (Math.random() + Math.random() - 1) * 1.5;
+        px[i] += n; px[i + 1] += n; px[i + 2] += n;
+      }
+      g.putImageData(img, 0, 0);
+    }
+
+    buildGlow() {
+      const W = this.W, H = this.H, d = this.dpr, L = this.L;
+      const off = 20000;
+      const gc = this.glowC || (this.glowC = document.createElement('canvas'));
+      gc.width = Math.round(W * d); gc.height = Math.round(H * d);
+      let g = gc.getContext('2d');
+      g.setTransform(d, 0, 0, d, -off * d, 0);       // dibujar fuera de vista: solo queda la sombra
+      g.shadowOffsetX = off * d; g.shadowOffsetY = 0;
+      g.shadowBlur = L.F * 0.22 * d;
+      this.drawLogo(g, 'glow');
+      g.shadowBlur = L.F * 0.07 * d;
+      this.drawLogo(g, 'glow');
+      const fc = this.fillC || (this.fillC = document.createElement('canvas'));
+      fc.width = gc.width; fc.height = gc.height;
+      g = fc.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+      this.drawLogo(g, 'real');
+    }
+
+    /* ---------- Fases ---------- */
+    recolor(i, col, start, dur, now) {
+      const m = (now - this.cs[i]) / this.cd[i];
+      if (m >= 0.5) this.ca[i] = this.cb[i];
+      this.cb[i] = col; this.cs[i] = start; this.cd[i] = dur;
+    }
+
+    enter(k, t0) {
+      this.phase = k;
+      const N = this.N, Nt = this.Nt;
+      if (k === 0) {
+        for (let i = 0; i < N; i++) {
+          this.dimT[i] = 1; this.nst[i] = Infinity;
+          if (this.mode[i] === 1 && this.rel[i] === Infinity) this.rel[i] = t0;
+        }
+      } else if (k === 1) {                    // del caos directo al logo, barrido de izquierda a derecha
+        for (let i = 0; i < N; i++) {
+          if (i < Nt) {
+            this.ntx[i] = this.txX[i]; this.nty[i] = this.txY[i];
+            this.nst[i] = t0 + this.txD[i]; this.ndu[i] = 1.15;
+            this.recolor(i, this.ct[i], this.nst[i] + 0.25, 1.1, t0);
+            this.dimT[i] = 1;
+          } else this.dimT[i] = 0.1;
+        }
+      } else if (k === 2) {
+        this.sweepT0 = t0 + 0.3;               // destellos: al formarse y otro a mitad del reposo
+      } else if (k === 3) {
+        for (let i = 0; i < Nt; i++) this.rel[i] = t0 + this.rlD[i];
+        for (let i = Nt; i < N; i++) this.dimT[i] = 1;
+      }
+    }
+
+    setCap(cp, instant) {
+      this.cap = cp;
+      clearTimeout(this.capTO);
+      if (instant) { this.capSpan.textContent = CAPS[cp]; this.capEl.classList.remove('swap'); return; }
+      this.capEl.classList.add('swap');
+      this.capTO = setTimeout(() => { this.capSpan.textContent = CAPS[cp]; this.capEl.classList.remove('swap'); }, 320);
+    }
+
+    /* ---------- Simulación + dibujo (un solo pase) ---------- */
+    step(dt, draw, frozen) {
+      const T = frozen ? this.T : (this.T += dt);
+      const l = T % CYCLE;
+      if (!frozen) {
+        const k = phaseOf(l);
+        if (k !== this.phase) this.enter(k, T - (l - PH[k]));
+        const cp = capOf(l);
+        if (cp !== this.cap) this.setCap(cp, this.cap < 0);
+        const k3 = this.phase;
+        const a1 = Math.min(1, dt * 2.2);
+        this.calm += ((k3 === 2 ? 0.3 : k3 === 1 ? 0.55 : 1) - this.calm) * a1;
+        const gT = (k3 === 2 || (k3 === 1 && l > PH[1] + 1.9)) ? 1 : 0;
+        this.glow += (gT - this.glow) * Math.min(1, dt * (gT ? 1.4 : 4.5));
+        this.trail += (((k3 === 0 || k3 === 3) ? 0.42 : 1) - this.trail) * Math.min(1, dt * 3);
+        if (this.hint) { const on = k3 === 2; if (on !== this.hintOn) { this.hintOn = on; this.hint.classList.toggle('on', on); } }
+      }
+
+      const ctx = this.ctx, RG = this.R, d = this.dpr, W = this.W, H = this.H, N = this.N, sc = this.sc, L = this.L;
+      const buf = this.buf;
+      let cnt = 0;
+      if (draw && RG) {
+        RG.begin(this.cv.width, this.cv.height);
+        RG.quad('bg', this.trail, false);
+        if (this.glow > 0.01) {
+          RG.quad('glow', this.glow * 0.6, true);
+          RG.quad('fill', this.glow * 0.085, true);
+        }
+      } else if (draw) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = this.trail;
+        ctx.drawImage(this.bg, 0, 0);
+        ctx.globalCompositeOperation = 'lighter';
+        if (this.glow > 0.01) {
+          ctx.globalAlpha = this.glow * 0.6; ctx.drawImage(this.glowC, 0, 0);
+          ctx.globalAlpha = this.glow * 0.085; ctx.drawImage(this.fillC, 0, 0);
+        }
+        ctx.setTransform(d, 0, 0, d, 0, 0);
+      }
+
+      const { x, y, vx, vy, sx, sy, tx, ty, st, du, cvv, ox, oy, ovx, ovy, ba, flk, ph, sz, fs, dim, dimT,
+              cs, cd, rel, ntx, nty, nst, ndu, mode, ca, cb, cc, noisy } = this;
+      const spr = this.spr;
+      const damp = Math.pow(0.962, dt * 60);
+      const acc = 150 * sc * this.calm, jitN = 1500 * sc * this.calm, jitR = 220 * sc * this.calm;
+      const f1 = 4.6 / W, f2 = 5.3 / H, f3 = 3.1 / (W + H);
+      const t1 = T * 0.31, t2 = T * 0.27, t3 = T * 0.13;
+      const mOn = this.mOn && !frozen, mx = this.mx, my = this.my, R = this.mR, R2 = R * R, mF = this.mF;
+      const kS = 120 * dt, dS = Math.pow(0.9, dt * 60);
+      const dimK = Math.min(1, dt * 1.8);
+      const rad4 = this.rad * 4;
+      const breathe = 0.93 + 0.07 * Math.sin(T * 1.6);
+      const shimA = frozen ? 0 : this.rad * 0.16;
+      const cx = L.cx, cy = L.cy, PI = Math.PI;
+      // brillo que recorre las letras
+      let sw = (T - this.sweepT0) / 1.7; if (sw > 1) sw = (T - this.sweepT0 - 2.6) / 1.7;
+      const sweepOn = draw && !frozen && sw >= 0 && sw <= 1;
+      const bw = L.F * 0.5;
+      const sweepX = L.x0 - 2 * bw + ease(clamp(sw, 0, 1)) * (L.wLogo + 4 * bw);
+
+      for (let i = 0; i < N; i++) {
+        if (T >= nst[i]) {                     // empieza el vuelo hacia la nueva forma
+          sx[i] = x[i] - ox[i]; sy[i] = y[i] - oy[i];
+          tx[i] = ntx[i]; ty[i] = nty[i]; st[i] = nst[i]; du[i] = ndu[i];
+          nst[i] = Infinity; mode[i] = 1;
+        }
+        if (T >= rel[i]) {                     // se suelta: ráfaga hacia la derecha
+          rel[i] = Infinity; mode[i] = 0;
+          const dx = x[i] - cx, dy = y[i] - cy;
+          vx[i] = (60 + Math.random() * 240) * sc + dx * 0.45;
+          vy[i] = dy * 0.9 + (Math.random() - .55) * 150 * sc;
+          ox[i] = oy[i] = ovx[i] = ovy[i] = 0;
+          this.recolor(i, cc[i], T + 0.1, 1.5, T);
+        }
+        let e = 0, px, py;
+        if (mode[i] === 0) {
+          const xi = x[i], yi = y[i];
+          let vxi = vx[i], vyi = vy[i];
+          const ang = Math.sin(xi * f1 + t1) * 2.1 + Math.cos(yi * f2 - t2) * 2.0 + Math.sin((xi + yi) * f3 + t3 + ph[i] * 0.2) * 1.5;
+          const j = noisy[i] ? jitN : jitR;
+          vxi += (Math.cos(ang) * acc + (Math.random() - .5) * j) * dt;
+          vyi += (Math.sin(ang) * acc + (Math.random() - .5) * j) * dt;
+          if (mOn) {
+            const dx = xi - mx, dy = yi - my, d2 = dx * dx + dy * dy;
+            if (d2 < R2) { const dd = Math.sqrt(d2) + .01, f = 1 - dd / R; vxi += dx / dd * f * f * mF * 0.6 * dt; vyi += dy / dd * f * f * mF * 0.6 * dt; }
+          }
+          vxi *= damp; vyi *= damp;
+          px = xi + vxi * dt; py = yi + vyi * dt;
+          if (px < -8) px += W + 16; else if (px > W + 8) px -= W + 16;
+          if (py < -8) py += H + 16; else if (py > H + 8) py -= H + 16;
+          vx[i] = vxi; vy[i] = vyi;
+        } else {
+          let u = (T - st[i]) / du[i];
+          if (u > 1) u = 1; else if (u < 0) u = 0;
+          e = ease(u);
+          const dx = tx[i] - sx[i], dy = ty[i] - sy[i];
+          const s = u < 1 ? Math.sin(PI * e) * cvv[i] : 0;
+          let bx = sx[i] + dx * e - dy * s, by = sy[i] + dy * e + dx * s;
+          if (u === 1 && shimA > 0) { bx += Math.sin(T * 2.1 + ph[i]) * shimA; by += Math.cos(T * 1.7 + ph[i] * 1.3) * shimA; }
+          let oxi = ox[i], oyi = oy[i], ovxi = ovx[i], ovyi = ovy[i];
+          if (mOn) {
+            const dx2 = bx + oxi - mx, dy2 = by + oyi - my, d2 = dx2 * dx2 + dy2 * dy2;
+            if (d2 < R2) { const dd = Math.sqrt(d2) + .01, f = 1 - dd / R; ovxi += dx2 / dd * f * f * mF * dt; ovyi += dy2 / dd * f * f * mF * dt; }
+          }
+          if (oxi !== 0 || oyi !== 0 || ovxi !== 0 || ovyi !== 0) {
+            ovxi = (ovxi - oxi * kS) * dS; ovyi = (ovyi - oyi * kS) * dS;
+            oxi += ovxi * dt; oyi += ovyi * dt;
+            if (oxi * oxi + oyi * oyi < 1e-4 && ovxi * ovxi + ovyi * ovyi < 1e-3) oxi = oyi = ovxi = ovyi = 0;
+            ox[i] = oxi; oy[i] = oyi; ovx[i] = ovxi; ovy[i] = ovyi;
+          }
+          px = bx + oxi; py = by + oyi;
+        }
+        x[i] = px; y[i] = py;
+        dim[i] += (dimT[i] - dim[i]) * dimK;
+        if (!draw) continue;
+
+        const fl = 0.5 + 0.5 * Math.sin(T * flk[i] + ph[i]);
+        let a = ba[i] * (0.32 + 0.68 * fl);
+        let size = sz[i];
+        if (e > 0) {
+          const af = (0.86 + 0.14 * Math.sin(T * 2.3 + ph[i] * 3)) * breathe;
+          a += (af - a) * e; size += (fs[i] - size) * e;
+        }
+        a *= dim[i];
+        if (a < 0.01) continue;
+        let s2 = rad4 * size;
+        let m = (T - cs[i]) / cd[i];
+        if (m > 1) m = 1; else if (m < 0) m = 0;
+        if (RG) {
+          const ia = ca[i] * 3, ib = cb[i] * 3;
+          let r = COLF[ia] + (COLF[ib] - COLF[ia]) * m;
+          let g = COLF[ia + 1] + (COLF[ib + 1] - COLF[ia + 1]) * m;
+          let b = COLF[ia + 2] + (COLF[ib + 2] - COLF[ia + 2]) * m;
+          if (sweepOn && e === 1) {               // destello que recorre las letras
+            const dd = px + (py - cy) * 0.45 - sweepX;
+            if (dd > -2.6 * bw && dd < 2.6 * bw) {
+              const k = Math.exp(-(dd * dd) / (bw * bw));
+              r += k * 0.95; g += k * 0.9; b += k * 0.8; s2 *= 1 + 0.32 * k;
+            }
+          }
+          const o = cnt * STRIDE;
+          buf[o] = px; buf[o + 1] = py; buf[o + 2] = s2;
+          buf[o + 3] = r; buf[o + 4] = g; buf[o + 5] = b; buf[o + 6] = a;
+          cnt++;
+        } else {
+          const h = s2 * 0.5;
+          ctx.globalAlpha = a; ctx.drawImage(spr[m >= 0.5 ? cb[i] : ca[i]], px - h, py - h, s2, s2);
+        }
+      }
+      if (draw) {
+        if (RG) RG.points(buf, cnt, W, H, d);
+        else { ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+      }
+    }
+
+    /* ---------- Estático (prefers-reduced-motion) ---------- */
+    renderStatic() {
+      const Nt = this.Nt, N = this.N;
+      for (let i = 0; i < N; i++) {
+        if (i < Nt) {
+          this.mode[i] = 1; this.sx[i] = this.tx[i] = this.txX[i]; this.sy[i] = this.ty[i] = this.txY[i];
+          this.st[i] = -1e9; this.du[i] = 1; this.ca[i] = this.cb[i] = this.ct[i]; this.cs[i] = -1e9;
+          this.dim[i] = this.dimT[i] = 1; this.ba[i] = 1;
+        } else { this.dim[i] = this.dimT[i] = 0.12; }
+        this.nst[i] = Infinity; this.rel[i] = Infinity;
+      }
+      this.glow = 1; this.trail = 1; this.phase = 2;
+      this.T = 1.234;          // instante fijo: sin parpadeo
+      this.setCap(1, true);
+      this.step(0, true, true);
+    }
+
+    /* ---------- Ciclo de vida ---------- */
+    resumeAfterRebuild() {
+      const l = this.T % CYCLE, k = phaseOf(l);
+      this.phase = k; this.cap = -1;
+      if (k === 1 || k === 2) { this.enter(1, this.T); this.phase = k; }
+    }
+
+    loop(now) {
+      if (!this.running) return;
+      const dt = Math.min(0.05, Math.max(0.0001, (now - this.last) / 1000));
+      this.last = now;
+      this.step(dt, true, false);
+      requestAnimationFrame(this.loop);
+    }
+    start() {
+      if (this.running || this.reduced || this.paused || this.lost || !this.visible || !this.N) return;
+      this.running = true; this.last = performance.now();
+      requestAnimationFrame(this.loop);
+    }
+    stop() { this.running = false; }
+
+    // depuración / capturas: CAOS[0].seek(9.5)
+    seek(t, pause) {
+      this.initParticles();
+      this.T = 0; this.phase = -1; this.cap = -1; this.calm = 1; this.glow = 0; this.trail = 1; this.sweepT0 = -1e9;
+      const n = Math.max(1, Math.round(t * 60));
+      this.clear();
+      const drawFrom = n - 24;                 // los últimos cuadros se dibujan (estelas reales)
+      for (let i = 0; i < n; i++) this.step(1 / 60, i >= drawFrom, false);
+      if (pause) { this.paused = true; this.stop(); }
+    }
+    play() { this.paused = false; this.start(); }
+  }
+
+  /* ---------- Logo oficial (fuente de verdad: ../assets/logo-sarare.svg) ----------
+     Se leen los trazados vectoriales del SVG y se dibujan con Path2D en un lienzo fuera de pantalla
+     para muestrear los destinos. Solo si el archivo no se puede leer (p. ej. abierto como file://)
+     se usa la copia de respaldo de abajo, idéntica al SVG oficial del 04/10/2026. */
+  const LOGO_URL = '../assets/logo-sarare.svg';
+  const LOGO_FALLBACK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="71.4 71.4 842.3 198.3"><g transform="translate(71.43 71.43)"><g transform="translate(86.6 100)"><path fill="#f2f4f3" d="M-83.51 -51.79 L0 -100 L83.51 -51.79 L71.14 -44.64 L0 -85.71 L-71.14 -44.64ZM86.6 -46.43 L86.6 50 L3.09 98.21 L3.09 83.93 L74.23 42.86 L74.23 -39.29ZM-3.09 98.21 L-86.6 50 L-86.6 -46.43 L-74.23 -39.29 L-74.23 42.86 L-3.09 83.93Z"/><path fill="#f8cf6a" d="M0 -3.57 L-58.77 -37.5 L0 -71.43 L58.77 -37.5Z"/><path fill="#f0a23b" d="M-3.09 1.79 L-3.09 69.64 L-61.86 35.71 L-61.86 -32.14Z"/><path fill="#e0663a" d="M3.09 1.79 L61.86 -32.14 L61.86 35.71 L3.09 69.64Z"/></g><g transform="translate(210.32 64.29)"><path fill="#f2f4f3" d="M42.6 8.58A22.3 20.65 0 0 0 16.56 -0.06A22.3 20.65 0 0 0 1.77 23.37A22.3 20.65 0 0 0 23.68 40.15A10.93 10.49 0 0 1 34.43 48.75A10.93 10.49 0 0 1 27.28 60.55A10.93 10.49 0 0 1 14.31 56.05L3.59 62.25A23.68 21.93 0 0 0 31.24 71.42A23.68 21.93 0 0 0 46.94 46.54A23.68 21.93 0 0 0 23.68 28.72A9.55 9.21 0 0 1 14.28 21.16A9.55 9.21 0 0 1 20.52 10.81A9.55 9.21 0 0 1 31.87 14.77ZM56.5 71.43 L81.23 0 L88.91 0 L113.65 71.43 L100.54 71.43 L93.12 50 L77.03 50 L69.61 71.43ZM89.42 39.31 L85.07 26.77 L80.73 39.31ZM125.26 0H137.4V71.43H125.26ZM131.33 0H148.86A20.71 20.71 0 0 1 169.57 20.71A20.71 20.71 0 0 1 148.86 41.43H131.33V30.74H148.86A8.57 10.03 0 0 0 157.43 20.71A8.57 10.03 0 0 0 148.86 10.69H131.33ZM131.92 30.74 L146.59 30.74 L172.4 71.43 L157.73 71.43ZM178.13 71.43 L202.86 0 L210.54 0 L235.27 71.43 L222.17 71.43 L214.75 50 L198.66 50 L191.24 71.43ZM211.05 39.31 L206.7 26.77 L202.36 39.31ZM246.89 0H259.03V71.43H246.89ZM252.96 0H270.49A20.71 20.71 0 0 1 291.2 20.71A20.71 20.71 0 0 1 270.49 41.43H252.96V30.74H270.49A8.57 10.03 0 0 0 279.06 20.71A8.57 10.03 0 0 0 270.49 10.69H252.96ZM253.55 30.74 L268.22 30.74 L294.03 71.43 L279.36 71.43ZM306 0H318.15V71.43H306ZM306 0H347.43V10.69H306ZM306 60.74H347.43V71.43H306ZM306 29.66H343.29V40.34H306Z"/><path fill="#f0a23b" transform="translate(376 0)" d="M0 0H48.57V7.23H0ZM20.18 0H28.39V71.43H20.18ZM60.54 0H68.76V71.43H60.54ZM60.54 0H101.97V7.23H60.54ZM60.54 64.2H101.97V71.43H60.54ZM60.54 31.39H97.83V38.61H60.54ZM186.85 54.14A36.86 36.86 0 0 1 145.39 71.32A36.86 36.86 0 0 1 118.07 35.71A36.86 36.86 0 0 1 145.39 0.11A36.86 36.86 0 0 1 186.85 17.29L179.94 21.27A28.64 29.63 0 0 0 147.28 7.16A28.64 29.63 0 0 0 126.29 35.71A28.64 29.63 0 0 0 147.28 64.27A28.64 29.63 0 0 0 179.94 50.15ZM204.54 0H212.75V71.43H204.54ZM247.75 0H255.96V71.43H247.75ZM204.54 32.1H255.96V39.33H204.54Z"/></g></g></svg>';
+
+  // Rol de cada trazado según su color de relleno y su posición (símbolo a la izquierda de x≈250 u)
+  function roleOf(fill, tx) {
+    const f = fill.toLowerCase();
+    if (f === '#f8cf6a') return 1;
+    if (f === '#e0663a') return 3;
+    if (f === '#f0a23b') return tx < 250 ? 2 : 5;
+    if (f === '#f2f4f3') return tx < 250 ? 0 : 4;
+    return -1;
+  }
+
+  function parseLogo(svgText) {
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const svg = doc.documentElement;
+    if (!svg || svg.nodeName.toLowerCase() !== 'svg') throw new Error('el archivo no es un SVG válido');
+    const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || vb.some(v => !isFinite(v))) throw new Error('viewBox inválido: ' + svg.getAttribute('viewBox'));
+    const parts = [];
+    const walk = (el, tx, ty) => {
+      for (const ch of el.children) {
+        let x = tx, y = ty;
+        const tr = ch.getAttribute('transform');
+        if (tr) {
+          const m = /^\s*translate\(\s*(-?[\d.]+(?:e-?\d+)?)(?:[\s,]+(-?[\d.]+(?:e-?\d+)?))?\s*\)\s*$/.exec(tr);
+          if (!m) throw new Error('transform no soportado en el logo: ' + tr);
+          x += parseFloat(m[1]); y += parseFloat(m[2] || '0');
+        }
+        const tag = ch.nodeName.toLowerCase();
+        if (tag === 'g') walk(ch, x, y);
+        else if (tag === 'path') {
+          const fill = ch.getAttribute('fill') || '';
+          const role = roleOf(fill, x);
+          if (role < 0) throw new Error('color de relleno inesperado en el logo: ' + fill);
+          parts.push({ path: new Path2D(ch.getAttribute('d')), fill, role, tx: x, ty: y });
+        }
+      }
+    };
+    walk(svg, 0, 0);
+    const roles = new Set(parts.map(p => p.role));
+    if (roles.size !== 6) throw new Error('el logo no tiene las 6 piezas esperadas (anillo, 3 caras, SARARE, TECH)');
+    return { vb, parts };
+  }
+
+  async function loadLogo() {
+    try {
+      const res = await fetch(LOGO_URL, { cache: 'no-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return parseLogo(await res.text());
+    } catch (err) {
+      console.warn('caos-al-orden: no se pudo leer ' + LOGO_URL + ', se usa la copia de respaldo', err);
+      return parseLogo(LOGO_FALLBACK);
+    }
+  }
+
+  /* ---------- Arranque ---------- */
+  // incrustada (?embed=1): solo la tarjeta grande
+  const EMBED = document.documentElement.classList.contains('embed');
+  const instances = [...document.querySelectorAll(EMBED ? '.stage--lg[data-caos]' : '[data-caos]')].map(el => new CaosAlOrden(el));
+  window.CAOS = instances;
+
+  function boot() {
+    instances.forEach(inst => {
+      inst.build();
+      if (inst.reduced) inst.renderStatic(); else inst.start();
+
+      let to = 0, lastW = inst.W, lastH = inst.H;
+      new ResizeObserver(() => {
+        clearTimeout(to);
+        to = setTimeout(() => {
+          const r = inst.root.getBoundingClientRect();
+          if (Math.round(r.width) === lastW && Math.round(r.height) === lastH) return;
+          const wasRunning = inst.running; inst.stop();
+          inst.build(); lastW = inst.W; lastH = inst.H;
+          if (inst.reduced) inst.renderStatic();
+          else { inst.resumeAfterRebuild(); if (wasRunning || !inst.paused) inst.start(); }
+        }, 160);
+      }).observe(inst.root);
+
+      new IntersectionObserver(entries => {
+        for (const en of entries) {
+          inst.visible = en.isIntersecting;
+          if (inst.visible) inst.start(); else inst.stop();
+        }
+      }, { rootMargin: '80px' }).observe(inst.root);
+    });
+
+    reduceMQ.addEventListener('change', e => {
+      instances.forEach(inst => {
+        inst.reduced = e.matches;
+        if (e.matches) { inst.stop(); inst.renderStatic(); }
+        else { inst.initParticles(); inst.T = 0; inst.phase = -1; inst.cap = -1; inst.start(); }
+      });
+    });
+
+    const q = new URLSearchParams(location.search);
+    if (q.has('t')) instances.forEach(inst => inst.seek(parseFloat(q.get('t')) || 0, q.has('pausa')));
+  }
+
+  loadLogo()
+    .then(logo => { LOGO = logo; boot(); })
+    .catch(err => { console.error('caos-al-orden: no se pudo preparar el logo; la animación no arranca', err); });
+})();
+</script>
+</body>
+</html>

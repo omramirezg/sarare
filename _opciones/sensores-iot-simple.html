@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensores en vivo</title>
+<script>/* ?embed=1: solo la tarjeta grande, a pantalla completa (para incrustarla en un iframe) */
+if (/[?&]embed=1(&|$)/.test(location.search)) {
+  document.documentElement.classList.add('embed');
+  // dentro de la portada (iframe aislado): la rueda y las flechas mueven la página que la contiene
+  if (window.parent !== window) {
+    addEventListener('wheel', function (e) { e.preventDefault(); parent.postMessage({ sarare: 'wheel', dx: e.deltaX, dy: e.deltaY, mode: e.deltaMode }, '*'); }, { passive: false });
+    addEventListener('keydown', function (e) {
+      if (['ArrowDown', 'PageDown', ' ', 'ArrowUp', 'PageUp'].indexOf(e.key) < 0) return;
+      e.preventDefault(); parent.postMessage({ sarare: 'key', key: e.key }, '*');
+    });
+  }
+}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f0d;--bg-2:#0f1412;--panel:#161d1a;--line:#26302c;
+  --tx:#f2f4f3;--tx-2:#98a39e;--tx-3:#6d7873;
+  --amb:#f0a23b;--amb-2:#f6c35b;--red:#e0663a;--grn:#3fb68b;
+  --head:"Sora",system-ui,sans-serif;--body:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg)}
+body{color:var(--tx);font-family:var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 40px 56px}
+h1{font-family:var(--head);font-weight:600;font-size:26px;letter-spacing:-.01em}
+.sub{color:var(--tx-2);font-size:14.5px;margin-top:6px;line-height:1.5}
+.tag{font-family:var(--mono);font-size:11px;color:var(--tx-3);letter-spacing:.06em;margin:28px 0 10px}
+.stage{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--bg-2)}
+.stage.lg{width:100%;max-width:1100px;height:600px}
+.stage.sm{width:480px;max-width:100%;height:320px}
+@media (max-width:640px){.wrap{padding:24px 16px 40px}h1{font-size:22px}.stage.lg{height:520px}}
+
+/* ============ widget ============ */
+.iot{position:relative;width:100%;height:100%;overflow:hidden;display:grid;
+  grid-template-columns:240px minmax(0,1fr);gap:40px;padding:40px;
+  background:radial-gradient(90% 70% at 85% 0%,rgba(240,162,59,.05),transparent 60%),var(--bg-2)}
+.sens{display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0}
+.sen{position:relative;padding:18px 20px;border-radius:14px;background:var(--panel);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);transition:box-shadow .4s,background .4s}
+.top{display:flex;align-items:center;gap:9px;color:var(--tx-2)}
+.top svg{width:16px;height:16px;flex:none;color:var(--amb);transition:color .4s}
+.top b{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{margin-left:auto;flex:none;width:7px;height:7px;border-radius:50%;background:var(--grn);box-shadow:0 0 0 3px rgba(63,182,139,.14);transition:background .4s,box-shadow .4s}
+.val{display:block;margin-top:12px;font-family:var(--head);font-weight:600;font-size:32px;line-height:1;letter-spacing:-.02em;white-space:nowrap;transition:color .4s}
+.val u{text-decoration:none;font-family:var(--body);font-weight:500;font-size:14px;color:var(--tx-3);margin-left:4px;letter-spacing:0}
+.sen.alarm{background:linear-gradient(180deg,rgba(224,102,58,.14),rgba(224,102,58,.05)),var(--panel);box-shadow:inset 0 0 0 1px rgba(224,102,58,.7),0 0 0 4px rgba(224,102,58,.10)}
+.sen.alarm .val{color:#ff8c63}.sen.alarm .top svg{color:var(--red)}
+.sen.alarm .dot{background:var(--red);box-shadow:0 0 0 3px rgba(224,102,58,.22);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.35}}
+
+.chart{position:relative;min-width:0;min-height:0}
+.chart canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.live{position:absolute;left:0;top:0;z-index:1;display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--tx-3)}
+.live i{display:none}
+.live b{font-weight:700;color:var(--acc,#f0a23b);padding:3px 7px;border:1px solid rgba(240,162,59,.45);border-radius:4px;letter-spacing:.12em;font-size:.95em}
+
+.ntf{position:absolute;top:22px;right:22px;z-index:3;min-width:250px;padding:12px 16px 12px 14px;border-radius:12px;
+  display:flex;gap:11px;align-items:flex-start;background:#1b2320;box-shadow:0 14px 40px -12px rgba(0,0,0,.7),inset 0 0 0 1px rgba(224,102,58,.55);
+  transform:translateY(-24px);opacity:0;transition:transform .5s cubic-bezier(.2,1.2,.35,1),opacity .35s,box-shadow .4s}
+.ntf.on{transform:none;opacity:1}
+.ntf .ic{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;color:#fff;background:var(--red);transition:background .4s}
+.ntf .nt{min-width:0}.ntf b{display:block;font-family:var(--head);font-weight:600;font-size:13px;color:#ff9a76;transition:color .4s}
+.ntf .nt-s{display:block;margin-top:2px;font-size:12px;color:#d6dcd9;white-space:nowrap}
+.ntf.ok{box-shadow:0 14px 40px -12px rgba(0,0,0,.7),inset 0 0 0 1px rgba(63,182,139,.55)}
+.ntf.ok .ic{background:var(--grn)}.ntf.ok b{color:#6fdcb2}
+
+/* compacto */
+.iot.sm{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:16px;padding:18px}
+.iot.sm .sens{flex-direction:row;gap:10px}
+.iot.sm .sen{flex:1 1 0;min-width:0;padding:11px 13px;border-radius:11px}
+.iot.sm .top{gap:7px}.iot.sm .top svg{width:13px;height:13px}.iot.sm .top b{font-size:9px}
+.iot.sm .dot{width:6px;height:6px}
+.iot.sm .val{margin-top:8px;font-size:20px}.iot.sm .val u{font-size:11px;margin-left:3px}
+.iot.sm .live{font-size:9.5px}
+.iot.sm .ntf{top:12px;right:12px;min-width:0;width:220px;padding:9px 12px 9px 10px;gap:9px}
+.iot.sm .ntf .ic{width:18px;height:18px;font-size:10px}
+.iot.sm .ntf{align-items:center}.iot.sm .ntf b{font-size:11.5px}.iot.sm .ntf .nt-s{font-size:10.5px}
+
+.iot.static *{transition:none!important;animation:none!important}
+@media (prefers-reduced-motion:reduce){.iot *{transition:none!important;animation:none!important}}
+
+/* modo incrustado */
+html.embed,html.embed body{width:100%;height:100%;overflow:hidden}
+html.embed .wrap{max-width:none;height:100%;padding:0}
+html.embed h1,html.embed .sub,html.embed .tag,html.embed .stage.sm{display:none}
+html.embed .stage.lg{max-width:none;height:100%;border:0;border-radius:0}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Sensores en vivo con alerta</h1>
+  <p class="sub">Sensores que transmiten en tiempo real; cuando una medición cruza el límite, la tarjeta se pone roja y llega una alerta al celular.</p>
+  <p class="tag">TARJETA GRANDE · 1100 × 600</p>
+  <div class="stage lg"><div data-iot></div></div>
+  <p class="tag">TARJETA PEQUEÑA · 480 × 320</p>
+  <div class="stage sm"><div data-iot></div></div>
+</main>
+
+<script>
+(() => {
+'use strict';
+const TAU = Math.PI * 2;
+const LIM = 30, YMIN = 19.5, YMAX = 35.5;
+const WIN = 10, DT = 1 / 15;            // ventana visible (s) y paso de muestreo
+const CYCLE = 11, CEN = 6.5, LAT = .5;   // un pico cada ~11 s; la alerta llega 0,5 s después
+const NS = Math.ceil(WIN / DT) + 2;
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const hash = k => { const s = Math.sin(k * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const base = t => 25 + .45 * Math.sin(TAU * t / 19) + .2 * Math.sin(TAU * t / 5.3 + 1) + .07 * Math.sin(TAU * t / 1.7);
+function spike(t) {
+  let s = 0; const k = Math.floor(t / CYCLE);
+  for (let j = k - 1; j <= k + 1; j++) {
+    const d = t - (j * CYCLE + CEN); if (d < -5 || d > 9) continue;
+    const sg = d < 0 ? .7 : 1.4;
+    s += (7.4 + 1 * hash(j)) * Math.exp(-d * d / (2 * sg * sg));
+  }
+  return s;
+}
+const temp = t => base(t) + spike(t);
+const hum  = t => 59 + 1.6 * Math.sin(TAU * t / 29) - .2 * spike(t);
+const lvl  = t => 84 - 3 * (.5 - .5 * Math.cos(TAU * t / 120));
+const fmt  = (v, d) => v.toFixed(d).replace('.', ',');
+
+const ICON = {
+  temp: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+  drop: '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+  tank: '<rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M4 12.5c2.7-1.6 5.3 1.6 8 0s5.3-1.6 8 0"/>'
+};
+const SENS = [
+  { name: 'Temperatura', unit: '°C', dec: 1, ico: 'temp', fn: temp, per: 0,   ease: 10 },
+  { name: 'Humedad',     unit: '%',  dec: 0, ico: 'drop', fn: hum,  per: 1.5, ease: 4 },
+  { name: 'Nivel tanque',unit: '%',  dec: 0, ico: 'tank', fn: lvl,  per: 2,   ease: 4 }
+];
+const TPL = `
+<div class="sens">${SENS.map(s => `
+  <div class="sen"><div class="top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[s.ico]}</svg><b>${s.name}</b><i class="dot"></i></div>
+  <span class="val"><em>--</em><u>${s.unit}</u></span></div>`).join('')}
+</div>
+<div class="chart"><span class="live"><i></i><b>EN VIVO</b> · bodega 2</span><canvas></canvas></div>
+<div class="ntf" role="status" aria-live="polite"><span class="ic">⚠</span><div class="nt"><b class="nt-t">Alerta enviada</b><span class="nt-s">Temperatura 33,1 °C · bodega 2</span></div></div>`;
+
+class Widget {
+  constructor(root) {
+    this.root = root; root.classList.add('iot'); root.innerHTML = TPL;
+    this.wrapEl = root.querySelector('.chart'); this.cv = root.querySelector('canvas'); this.x = this.cv.getContext('2d');
+    this.ntf = root.querySelector('.ntf'); this.ntfIc = this.ntf.querySelector('.ic'); this.ntfB = this.ntf.querySelector('.nt-t'); this.ntfS = this.ntf.querySelector('.nt-s');
+    this.xs = new Float64Array(NS + 1); this.ys = new Float64Array(NS + 1);
+    this.start = performance.now(); this.t0 = 1; this.lt = this.t0;
+    this.state = 'normal'; this.tA = 0; this.tR = 0; this.shown = false; this.vis = true;
+    const els = root.querySelectorAll('.sen');
+    this.S = SENS.map((s, i) => ({ ...s, el: els[i], valEl: els[i].querySelector('em'), disp: s.fn(this.t0), target: s.fn(this.t0), next: this.t0 + s.per, str: '' }));
+    this.layout = this.layout.bind(this);
+    const ro = new ResizeObserver(this.layout); ro.observe(root); ro.observe(this.wrapEl);
+    if ('IntersectionObserver' in window) new IntersectionObserver(e => { this.vis = e[0].isIntersecting; }).observe(root);
+    this.layout();
+    if (REDUCE) { root.classList.add('static'); this.renderStatic(); document.fonts && document.fonts.ready.then(() => this.renderStatic()); }
+    else { this.frame = this.frame.bind(this); requestAnimationFrame(this.frame); }
+  }
+
+  layout() {
+    const r = this.root.getBoundingClientRect(); if (!r.width) return;
+    this.sm = r.width < 680 || r.height < 420;
+    this.root.classList.toggle('sm', this.sm);
+    const c = this.wrapEl.getBoundingClientRect();
+    this.dpr = Math.min(devicePixelRatio || 1, 2); this.W = c.width; this.H = c.height;
+    this.cv.width = Math.max(1, Math.round(c.width * this.dpr)); this.cv.height = Math.max(1, Math.round(c.height * this.dpr));
+    const ns = this.ntf.style, cards = this.root.querySelectorAll('.sen');
+    if (this.sm) {   // en compacto la alerta cae justo sobre las tarjetas 2 y 3
+      const a = cards[1].getBoundingClientRect(), b = cards[2].getBoundingClientRect();
+      ns.top = (a.top - r.top) + 'px'; ns.left = (a.left - r.left) + 'px'; ns.width = (b.right - a.left) + 'px'; ns.height = a.height + 'px'; ns.right = 'auto';
+    } else ns.top = ns.left = ns.width = ns.height = ns.right = '';
+    if (REDUCE && this.S) this.renderStatic();
+  }
+
+  frame(now) {
+    requestAnimationFrame(this.frame);
+    const t = this.t0 + (now - this.start) / 1000, dt = t - this.lt; this.lt = t;
+    if (dt > 1) this.reset();
+    this.update(t, Math.min(dt, .1));
+    if (this.vis) this.draw(t);
+  }
+
+  reset() {
+    this.state = 'normal'; this.shown = false;
+    this.ntf.classList.remove('on', 'ok'); this.S[0].el.classList.remove('alarm');
+  }
+
+  update(t, dt) {
+    for (const s of this.S) {
+      if (s.per && t >= s.next) { s.target = s.fn(t); s.next = t - s.next > s.per * 2 ? t + s.per : s.next + s.per; }
+      const goal = s.per ? s.target : s.fn(t);
+      s.disp += (goal - s.disp) * (1 - Math.exp(-dt * s.ease));
+      const str = fmt(s.disp, s.dec); if (str !== s.str) { s.str = str; s.valEl.textContent = str; }
+    }
+    const v = temp(t);
+    if (this.state === 'normal' && v > LIM) {
+      this.state = 'alarm'; this.tA = t; this.shown = false; this.S[0].el.classList.add('alarm');
+    } else if (this.state === 'alarm') {
+      if (!this.shown && t - this.tA > LAT) {
+        this.shown = true; this.ntf.classList.remove('ok'); this.ntfIc.textContent = '⚠';
+        this.ntfB.textContent = 'Alerta enviada'; this.ntfS.textContent = `Temperatura ${fmt(Math.max(v, temp(t + .4)), 1)} °C · bodega 2`;
+        this.ntf.classList.add('on');
+      }
+      if (v < LIM - .5 && t - this.tA > 2.2) {
+        this.state = 'resolved'; this.tR = t; this.S[0].el.classList.remove('alarm');
+        this.ntf.classList.add('ok'); this.ntfIc.textContent = '✓';
+        this.ntfB.textContent = 'Normalizado'; this.ntfS.textContent = `Temperatura ${fmt(v, 1)} °C · bodega 2`;
+      }
+    } else if (this.state === 'resolved' && t - this.tR > 2.2) {
+      this.state = 'normal'; this.ntf.classList.remove('on');
+    }
+  }
+
+  draw(t) {
+    const x = this.x, W = this.W, H = this.H; if (!W || !H) return;
+    x.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); x.clearRect(0, 0, W, H);
+    const sm = this.sm, x0 = sm ? 30 : 34, x1 = W - (sm ? 12 : 18), y0 = sm ? 26 : 44, y1 = H - (sm ? 6 : 10);
+    const pw = x1 - x0, ph = y1 - y0; if (pw < 40 || ph < 30) return;
+    const X = tt => x1 - (t - tt) / WIN * pw, Y = v => y1 - (v - YMIN) / (YMAX - YMIN) * ph, yl = Y(LIM);
+    const font = (s, w = 500) => `${w} ${s}px "JetBrains Mono", ui-monospace, monospace`;
+
+    // rejilla mínima
+    x.lineWidth = 1; x.font = font(sm ? 9 : 10); x.textAlign = 'right'; x.textBaseline = 'middle';
+    for (const g of [20, 25]) {
+      const yy = Math.round(Y(g)) + .5;
+      x.strokeStyle = 'rgba(38,48,44,.55)'; x.beginPath(); x.moveTo(x0, yy); x.lineTo(x1, yy); x.stroke();
+      x.fillStyle = '#56615c'; x.fillText(`${g}°`, x0 - 8, yy);
+    }
+    // límite
+    x.setLineDash([5, 5]); x.strokeStyle = 'rgba(224,102,58,.7)';
+    x.beginPath(); x.moveTo(x0, Math.round(yl) + .5); x.lineTo(x1, Math.round(yl) + .5); x.stroke(); x.setLineDash([]);
+
+    // curva
+    const xs = this.xs, ys = this.ys, tg = Math.floor(t / DT) * DT; let n = 0;
+    for (let k = NS - 1; k >= 0; k--) { const tt = tg - k * DT; xs[n] = X(tt); ys[n] = Y(temp(tt)); n++; }
+    const v = temp(t); xs[n] = x1; ys[n] = Y(v); n++;
+    const path = () => { x.beginPath(); x.moveTo(xs[0], ys[0]); for (let i = 1; i < n; i++) x.lineTo(xs[i], ys[i]); };
+    x.save(); x.beginPath(); x.rect(x0, 0, pw + 1, H); x.clip();
+    path(); x.lineTo(x1, y1); x.lineTo(xs[0], y1); x.closePath();
+    const g = x.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, 'rgba(240,162,59,.22)'); g.addColorStop(1, 'rgba(240,162,59,0)');
+    x.fillStyle = g; x.fill();
+    x.lineJoin = 'round'; x.lineCap = 'round';
+    path(); x.strokeStyle = '#f0a23b'; x.lineWidth = 2.2; x.stroke();
+    x.beginPath(); x.rect(x0, 0, pw + 1, yl); x.clip();           // tramo sobre el límite
+    path(); x.strokeStyle = '#ff7a47'; x.lineWidth = 2.4; x.stroke();
+    x.restore();
+
+    // etiqueta del límite (con halo para leerse aunque la curva pase por debajo)
+    x.textAlign = 'left'; x.textBaseline = 'bottom'; x.font = font(sm ? 9 : 10);
+    x.lineWidth = 4; x.strokeStyle = '#0f1412'; x.strokeText('límite 30 °C', x0 + 2, yl - 6);
+    x.fillStyle = 'rgba(240,140,100,.95)'; x.fillText('límite 30 °C', x0 + 2, yl - 6);
+    // punto actual
+    const hot = v > LIM, c = hot ? '224,102,58' : '240,162,59', hy = Y(v);
+    const gl = x.createRadialGradient(x1, hy, 0, x1, hy, 14); gl.addColorStop(0, `rgba(${c},.45)`); gl.addColorStop(1, `rgba(${c},0)`);
+    x.fillStyle = gl; x.beginPath(); x.arc(x1, hy, 14, 0, TAU); x.fill();
+    x.fillStyle = hot ? '#ff7a47' : '#f0a23b'; x.beginPath(); x.arc(x1, hy, 4, 0, TAU); x.fill();
+  }
+
+  renderStatic() {
+    const t = 3 * CYCLE + CEN + .1;
+    for (const s of this.S) { s.disp = s.fn(t); s.valEl.textContent = fmt(s.disp, s.dec); }
+    this.S[0].el.classList.add('alarm');
+    this.ntfS.textContent = `Temperatura ${fmt(temp(t), 1)} °C · bodega 2`; this.ntf.classList.add('on');
+    this.draw(t);
+  }
+}
+// incrustada (?embed=1): solo la tarjeta grande
+const EMBED = document.documentElement.classList.contains('embed');
+document.querySelectorAll(EMBED ? '.stage.lg [data-iot]' : '[data-iot]').forEach(el => new Widget(el));
+})();
+</script>
+</body></html>

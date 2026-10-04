@@ -1,0 +1,22 @@
+# Borradores, respaldos y utilidades locales
+_v1/
+_v2/
+.playwright-mcp/
+LEVANTAR-PAGINA.bat
+REFERENCIAS.md
+*.png
+
+# De _opciones solo van al repositorio las animaciones que usa la portada
+_opciones/*
+!_opciones/documentos-a-datos.html
+!_opciones/vision-computador.html
+!_opciones/vision-ganado.html
+!_opciones/vision-banda.html
+!_opciones/cacao-iot-vision.html
+!_opciones/citas-agenda.html
+!_opciones/dron-cultivo.html
+!_opciones/inventario.html
+!_opciones/rutas-entregas.html
+!_opciones/facturas-automaticas.html
+!_opciones/sensores-iot-simple.html
+!_opciones/caos-al-orden.html
