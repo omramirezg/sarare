@@ -212,6 +212,9 @@
 .cubi.is-mini{height:clamp(40px,11vw,56px)}
 .cubi-say.is-short{font-size:11px;padding:5px 8px}
 @media (max-width:319px){.cubi-layer,.cubi-away,.cubi-bar{display:none}}
+.cubi-hl{outline:2px solid #f8cf6a!important;outline-offset:4px;animation:cubi-hl 1s ease-in-out infinite}
+@keyframes cubi-hl{50%{outline-offset:7px;outline-color:rgba(248,207,106,.4)}}
+@media (prefers-reduced-motion:reduce){.cubi-hl{animation:none}}
 @media (prefers-reduced-motion:reduce){.cubi,.cubi *,.cubi-say{animation:none!important;transition:none!important}}`;
 
   const SVG = `<svg viewBox="-92 -104 184 196" aria-hidden="true" focusable="false">
@@ -821,7 +824,7 @@
   // ---------- burbujas automáticas ----------
   (function chatter() {
     setTimeout(() => {
-      if (active && !still && !dragging && !say.classList.contains('is-on') && !typingDemo) speak(nextPhrase(), 2500);
+      if (active && !still && !dragging && !touring && !say.classList.contains('is-on') && !typingDemo) speak(nextPhrase(), 2500);
       chatter();
     }, rnd(8000, 12000));
   })();
@@ -837,7 +840,9 @@
       if (rig) rig.start();
       life();
     } else {
+      const wasTour = touring;
       abort();
+      if (wasTour) { endTour(); placeHomeNow(false); }   // no se queda varado a mitad del recorrido
       cubi.classList.add('is-paused');
       if (rig) rig.stop();
       say.classList.remove('is-on');
@@ -928,6 +933,56 @@
     life();
   };
 
+  // Vuelve a casa de inmediato (sin brincos); con fundido si estaba perdido
+  function placeHomeNow(fade) {
+    abort();
+    where = 'home';
+    layer.append(cubi, say);
+    say.classList.remove('is-on');
+    cubi.classList.remove('is-drag');
+    if (svg) svg.style.transform = '';
+    measureHome();
+    if (room && homeA) setPos(homeA.bar ? homeA.x1 : homeA.x1 - 10, homeA.y1);
+    if (fade && !still) {
+      cubi.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        cubi.style.transition = 'opacity .5s ease';
+        cubi.style.opacity = '';
+        setTimeout(() => { cubi.style.transition = ''; }, 600);
+      }));
+    }
+    save();
+    queue();
+  }
+  // Vigilante: cada 2 s comprueba que Cubi exista, tenga tamaño, esté dentro del documento y no quede tapado
+  let covered = 0;
+  setInterval(() => {
+    if (dragging || tiny.matches || document.hidden) return;
+    const r = cubi.getBoundingClientRect();
+    const de = document.documentElement;
+    let why = '';
+    if (!cubi.isConnected) why = 'fuera del documento';
+    else if (r.width < 2 || r.height < 2) why = 'sin tamaño';
+    else if (where === 'away') {
+      const dx = r.left + window.scrollX, dy = r.top + window.scrollY;
+      if (dx < -r.width || dx > de.scrollWidth || dy < -r.height || dy > de.scrollHeight) why = 'fuera de la página';
+      else if (!touring && r.bottom > 0 && r.top < window.innerHeight && r.left >= 0 && r.right <= window.innerWidth) {
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height * 0.5);
+        covered = el && !cubi.contains(el) && !el.closest('.top,.cookie,dialog,.cubi-say') ? covered + 1 : 0;
+        if (covered >= 2) why = 'tapado por otra capa';
+      }
+    } else if (where === 'home' && room && active && homeA) {
+      if (homeLayer().hidden) why = 'casa oculta';
+      else if (!moveAnim && (pos.x < homeA.x0 - mw || pos.x > homeA.w || (!homeA.bar && (pos.y < -mh || pos.y > homeA.h)))) why = 'fuera de su casa';
+    }
+    if (!why) return;
+    covered = 0;
+    console.warn('[cubi] se perdió de vista (' + why + '); vuelve a casa');
+    if (touring) endTour();
+    placeHomeNow(true);
+    if (active) life();
+  }, 2000);
+
   // ---------- arrastrar y soltar ----------
   let lastTap = 0, lastPointer = 'mouse';
   let press = null, grab = null, ptr = null, dragRaf = 0, dragPos = null, oldSelect = '';
@@ -994,6 +1049,7 @@
     life();
   };
   const onClick = async () => {
+    if (touring) { interruptTour(); return; }
     if (still || !active) return;
     abort();
     const t = gen;
@@ -1005,6 +1061,7 @@
     if (e.button !== 0 || tiny.matches) return;
     press = { id: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false };
     lastPointer = e.pointerType;
+    userTouched = true;
     ptr = { x: e.clientX, y: e.clientY };
     try { cubi.setPointerCapture(e.pointerId); }
     catch (err) { console.warn('[cubi] no se pudo capturar el puntero; el arrastre puede cortarse', err); }
@@ -1036,7 +1093,8 @@
   cubi.addEventListener('dragstart', (e) => e.preventDefault());
 
   cubi.addEventListener('pointerenter', (e) => {
-    if (e.pointerType !== 'mouse' || dragging || press) return;
+    userTouched = true;
+    if (e.pointerType !== 'mouse' || dragging || press || touring) return;
     speak(hello(), 2400);
     if (!active || still || typingDemo) return;
     abort();
@@ -1098,6 +1156,173 @@
     }, rnd(1800, 5000));
   })();
 
+  // ---------- recorrido por la portada: brinca sobre las palabras del titular y señala los botones ----------
+  const h1 = document.querySelector('.hero h1');
+  const btnMain = document.querySelector('.hero__cta .btn--amber');
+  const btnMore = document.querySelector('.hero__cta [data-explica]');
+  const wideHero = window.matchMedia('(min-width: 981px)');
+  let touring = false, tourCount = 0, userTouched = false, lastInput = performance.now(), tourScroll = 0, hlEl = null;
+  const docBox = (el) => { const r = el.getBoundingClientRect(); return { l: r.left + window.scrollX, r: r.right + window.scrollX, t: r.top + window.scrollY, b: r.bottom + window.scrollY }; };
+  const inView = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); return r.top > headerBottom() && r.bottom < window.innerHeight && r.width > 0; };
+  const stand = (cx, top) => ({ x: clamp(cx - mw / 2, window.scrollX + 4, window.scrollX + viewW() - mw - 4), y: top - mh * 0.97 });
+  // Cajas de cada palabra del titular (con Range: sin tocar el HTML), agrupadas por renglón
+  const headlineLines = () => {
+    if (!h1) return [];
+    const words = [];
+    const walker = document.createTreeWalker(h1, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const re = /\S+/g;
+      let m;
+      while ((m = re.exec(node.data))) {
+        const rg = document.createRange();
+        rg.setStart(node, m.index); rg.setEnd(node, m.index + m[0].length);
+        const rs = rg.getClientRects();
+        if (!rs.length || !rs[0].width) continue;
+        const r = rs[0];
+        words.push({ l: r.left + window.scrollX, r: r.right + window.scrollX, t: r.top + window.scrollY, b: r.bottom + window.scrollY });
+      }
+    }
+    const lines = [];
+    for (const w of words) {
+      const ln = lines.find((x) => Math.abs(x.t - w.t) < (w.b - w.t) * 0.5);
+      if (ln) ln.ws.push(w); else lines.push({ t: w.t, ws: [w] });
+    }
+    lines.forEach((ln) => ln.ws.sort((a, b) => a.l - b.l));
+    return lines.sort((a, b) => a.t - b.t);
+  };
+  const onWord = (w) => stand((w.l + w.r) / 2, w.t + (w.b - w.t) * 0.2);   // los pies sobre el borde de arriba de las letras
+  const headlinePath = () => {
+    const pts = [];
+    headlineLines().forEach((ln, i) => {
+      const ws = ln.ws.length > 1 ? [ln.ws[0], ln.ws[ln.ws.length - 1]] : [ln.ws[0]];
+      if (i % 2 === 0) ws.reverse();                 // en zigzag, empezando de derecha a izquierda (viene del editor)
+      ws.forEach((w) => pts.push(onWord(w)));
+    });
+    return pts.slice(0, 10);
+  };
+  const highlight = (el) => {
+    if (hlEl && hlEl !== el) hlEl.classList.remove('cubi-hl');
+    hlEl = el;
+    if (el) el.classList.add('cubi-hl');
+  };
+  // Casa de destino en coordenadas de la página (para llegar brincando y recién ahí volver a entrar)
+  const homeTarget = () => {
+    measureHome();
+    const fullH = mh;
+    cubi.classList.add('is-mini');
+    mw = cubi.offsetWidth; mh = cubi.offsetHeight;
+    const HL = homeLayer(), lr = HL.getBoundingClientRect();
+    const hx = homeA.bar ? homeA.x1 : homeA.x1 - 10, hy = homeA.y1;
+    return { lx: hx, ly: hy, x: lr.left + window.scrollX + hx, y: lr.top + window.scrollY + hy + (fullH - mh) };
+  };
+  const arriveHome = (h) => {
+    where = 'home';
+    homeLayer().append(cubi, say);
+    measureHome();
+    setPos(h.lx, h.ly);
+    land();
+    save();
+    queue();
+  };
+  function endTour() {
+    touring = false;
+    highlight(null);
+    cubi.classList.remove('is-pointdown');
+    lookBusy = false;
+  }
+  function interruptTour() {
+    if (!touring) return;
+    abort();
+    endTour();
+    if (!dragging) goHome();
+  }
+  async function tour() {
+    if (touring || !active || where !== 'home' || dragging || still || !btnMain || !room || document.hidden) return;
+    const desktop = wideHero.matches;
+    if (desktop && window.scrollY > 10) return;
+    if (!inView(btnMain)) return;
+    abort();
+    const t = gen;
+    touring = true; tourCount++; tourScroll = window.scrollY;
+    const r0 = cubi.getBoundingClientRect();
+    where = 'away';
+    away.append(cubi, say);
+    cubi.classList.add('is-mini');                    // más pequeño para no tapar el titular
+    mw = cubi.offsetWidth; mh = cubi.offsetHeight;
+    setPos(r0.left + window.scrollX + (r0.width - mw) / 2, r0.bottom + window.scrollY - mh);
+    awayA = { x0: pos.x, x1: pos.x, y0: pos.y, y1: pos.y, w: viewW() };
+    const hop = (p) => go(p.x, p.y, 'hop', t);
+    try {
+      if (desktop && h1) {
+        const fb = docBox(figure);                     // primero por el borde de arriba del editor, luego al titular
+        if (!(await hop(stand(fb.r - 110, fb.t)))) return;
+        if (!(await hop(stand(fb.l + 40, fb.t)))) return;
+        for (const p of headlinePath()) {
+          if (!(await hop(p))) return;
+          await wait(rnd(90, 220));
+        }
+      }
+      const steps = desktop
+        ? [[btnMain, '¿Tiene un proceso para automatizar? Cuéntenos aquí 👇'], [btnMore, '¿Quiere saber más? Toque aquí 👇']]
+        : [[btnMain, '¿Algo para automatizar? Aquí 👇']];
+      for (const [b, text] of steps) {
+        if (!b || !inView(b)) continue;
+        const bb = docBox(b);
+        if (!(await hop(stand(bb.r - mw * 0.45, bb.t)))) return;    // de pie sobre la esquina del botón (no tapa el texto)
+        highlight(b);
+        lookBusy = true; look(-0.6, 1);
+        cubi.classList.add('is-pointdown');
+        speak(text, 2800);
+        await wait(3000);
+        cubi.classList.remove('is-pointdown');
+        highlight(null);
+        lookBusy = false;
+        if (!alive(t)) return;
+      }
+      // de vuelta brincando: por el titular y el borde del editor
+      if (desktop && h1) {
+        const lines = headlineLines();
+        const back = [lines[lines.length - 1], lines[1]].filter(Boolean).map((ln) => onWord(ln.ws[ln.ws.length - 1]));
+        for (const p of back) if (!(await hop(p))) return;
+        const fb = docBox(figure);
+        if (!(await hop(stand(fb.l + 40, fb.t)))) return;
+      }
+      const h = homeTarget();
+      if (!(await go(h.x, h.y, 'hop', t))) return;
+      arriveHome(h);
+      endTour();
+      life();
+    } finally {
+      if (touring) endTour();
+    }
+  }
+  const tryTour = () => {
+    if (tourCount >= 3 || touring) return;
+    const idle = performance.now() - lastInput > 6000;
+    if ((tourCount === 0 && !userTouched) || idle) tour();
+  };
+  (function scheduleTour() {
+    setTimeout(() => {
+      if (still) {                                     // sin movimiento: solo una burbuja quieta, una vez
+        if (active && where === 'home') speak('¿Algo para automatizar? Cuéntenos en el botón naranja', 4000);
+        return;
+      }
+      tryTour();
+      if (tourCount < 3) setTimeout(function again() { tryTour(); if (tourCount < 3) setTimeout(again, tourCount ? rnd(45000, 60000) : 8000); },
+        tourCount ? rnd(45000, 60000) : 8000);
+    }, rnd(4000, 6000));
+  })();
+  ['pointermove', 'keydown', 'touchstart', 'wheel'].forEach((ev) => window.addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true }));
+  window.addEventListener('scroll', () => {
+    lastInput = performance.now();
+    if (touring && Math.abs(window.scrollY - tourScroll) > 40) interruptTour();
+  }, { passive: true });
+  document.addEventListener('click', (e) => {
+    if (touring && !cubi.contains(e.target) && e.target.closest && e.target.closest('a,button')) interruptTour();
+  }, true);
+  window.addEventListener('resize', () => { if (touring) interruptTour(); });
+
   // ---------- arranque ----------
   let mq = 0;
   const remeasure = () => {
@@ -1128,7 +1353,12 @@
   catch (e) { console.warn('[cubi] no se pudo leer la posición guardada; queda en casa', e); saved = null; }
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y) && !tiny.matches) {
     mw = cubi.offsetWidth; mh = cubi.offsetHeight;
-    setAway(clamp(saved.x, 6, viewW() - mw - 6), saved.y);
+    const de = document.documentElement;
+    if (saved.x >= 0 && saved.x <= de.scrollWidth - 20 && saved.y >= 0 && saved.y <= de.scrollHeight - mh) setAway(clamp(saved.x, 6, viewW() - mw - 6), saved.y);
+    else {
+      console.warn('[cubi] la posición guardada no es válida; queda en casa');
+      try { sessionStorage.removeItem(STORE); } catch (e) { console.warn('[cubi] no se pudo borrar la posición guardada', e); }
+    }
   }
   check();
   if (!still) setTimeout(() => { if (active && where === 'home') speak('¡Hola! Soy Cubi 👋', 2400); phraseN = 1; }, 1500);
