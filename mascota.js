@@ -420,7 +420,8 @@
       // data-yaw / data-pitch: desfase manual (para revisar ángulos; normalmente vacío)
       const yaw = S.yaw + A.yaw + (+host.dataset.yaw || 0), pitch = S.pitch + A.pitch + (+host.dataset.pitch || 0), roll = S.roll;
       const sit = 44 * (1 - S.legS);
-      el.move.style.transform = `translate3d(0,${((A.y + sit) * u).toFixed(2)}px,0) scale(${A.sx.toFixed(3)},${A.sy.toFixed(3)})`;
+      const boost = Math.max(1, 0.4 / u);            // Cubi pequeño (celular): saltos proporcionalmente más altos
+      el.move.style.transform = `translate3d(0,${((A.y * boost + sit) * u).toFixed(2)}px,0) scale(${A.sx.toFixed(3)},${A.sy.toFixed(3)})`;
       el.cam.style.transform = `rotateX(${CAM}deg)`;
       el.body.style.transform = `rotateY(${yaw.toFixed(2)}deg) rotateX(${pitch.toFixed(2)}deg) rotateZ(${roll.toFixed(2)}deg)`;
       el.ant.style.transform = `translate3d(0,${(-42 * u).toFixed(2)}px,0) rotateZ(${S.ant.toFixed(2)}deg)`;
@@ -428,7 +429,7 @@
       el.aR.style.transform = `translate3d(${(47 * u).toFixed(2)}px,${(-6 * u).toFixed(2)}px,0) rotateZ(${S.aRz.toFixed(2)}deg) rotateX(${S.aRx.toFixed(2)}deg)`;
       el.lL.style.transform = `translate3d(${(-22 * u).toFixed(2)}px,${((38 + S.lLy) * u).toFixed(2)}px,0) rotateX(${S.lLx.toFixed(2)}deg) scaleY(${S.legS.toFixed(3)})`;
       el.lR.style.transform = `translate3d(${(22 * u).toFixed(2)}px,${((38 + S.lRy) * u).toFixed(2)}px,0) rotateX(${S.lRx.toFixed(2)}deg) scaleY(${S.legS.toFixed(3)})`;
-      const lift = Math.min(0.65, Math.max(0, -A.y / 90));
+      const lift = Math.min(0.65, Math.max(0, -A.y * boost / 90));
       el.shadow.style.transform = `translate(-50%,-50%) scale(${(1 - lift).toFixed(3)})`;
       el.shadow.style.opacity = (0.38 * (1 - lift)).toFixed(3);
       for (const f of FACES) {
@@ -621,6 +622,8 @@
       const lift = 24 + Math.max(0, -dy) * 0.35 + Math.abs(dx) * 0.06;
       let top = Math.min(from.y, ny) - lift;
       if (where === 'home' && homeA && !homeA.bar) top = Math.max(top, homeA.y0 - mh * 0.12);   // que no se salga por arriba del panel
+      else if (where === 'home' && homeA && homeA.bar) top = Math.max(top, headerBottom() + 2 - figure.getBoundingClientRect().top);
+      else top = Math.max(top, window.scrollY + headerBottom() + 2);                              // por debajo del menú
       anim = cubi.animate([
         { transform: tf(from.x, from.y), easing: 'cubic-bezier(.2,.6,.4,1)' },
         { transform: tf(from.x + dx / 2, top), offset: 0.5, easing: 'cubic-bezier(.6,0,.8,.4)' },
@@ -699,6 +702,16 @@
   const hello = () => (phraseN++ === 0 ? '¡Hola! Soy Cubi 👋' : nextPhrase());
 
   // ---------- acciones ----------
+  const bounce = async (t, n) => {
+    const A = area();
+    for (let i = 0; i < n; i++) {
+      const dx = (Math.random() < 0.5 ? -1 : 1) * rnd(6, 14);
+      const nx = A ? clamp(pos.x + dx, A.x0, Math.max(A.x0, A.x1)) : pos.x + dx;
+      if (!(await go(Math.abs(nx - pos.x) < 3 ? pos.x + (dx > 0 ? 4 : -4) : nx, pos.y, 'hop', t))) return false;
+      await wait(rnd(60, 160));
+    }
+    return true;
+  };
   const canJump = () => where !== 'home' || (homeA && homeA.bar) || pos.y >= mh * 0.38;          // hay espacio arriba para saltar sin cortarse
   const fits = (name) => {
     const A = area();
@@ -746,7 +759,7 @@
     async dance(t) { await act(t, ['is-dance', 'is-happy'], 3000); },
     async turn(t) { await act(t, 'is-turn', 1000); },
     async antenna(t) { lookBusy = true; look(0, -1); await act(t, 'is-spin', 2000); lookBusy = false; },
-    async hop(t) { await act(t, 'is-hop', 1100); },
+    async hop(t) { if (where === 'home' && homeA && homeA.bar) { await bounce(t, 3); return; } await act(t, 'is-hop', 1100); },
     async table(t) { if (Math.random() < 0.5) speak('Soy un cubo de verdad 😄', 2200); await act(t, 'is-table', 4300); },
   };
   const BAG = ['type', 'type', 'wave', 'flip', 'juggle', 'kick', 'water', 'read', 'carry', 'nap', 'dance', 'turn', 'antenna', 'hop', 'table', 'table'];
@@ -765,9 +778,17 @@
     const A = area();
     if (!A) return;
     const randX = () => A.x0 + Math.random() * Math.max(0, A.x1 - A.x0);
-    if (where !== 'home' || A.bar) {
+    if (where === 'home' && A.bar) {                        // sobre la barra del editor: brinca, camina y rebota
+      const span = A.x1 - A.x0, r = Math.random();
+      const nx = span < 6 ? pos.x : randX();
+      if (r < 0.45 && span >= 6) await go(nx, A.y1, 'hop', t);
+      else if (r < 0.7 && span >= 6) await go(nx, A.y1, 'walk', t);
+      else await bounce(t, 2);
+      return;
+    }
+    if (where !== 'home') {
       if (A.x1 - A.x0 < 6) return;                          // sin espacio para caminar: se queda
-      if (A.bar || Math.random() < 0.75) await go(randX(), A.y1, 'walk', t);
+      if (Math.random() < 0.75) await go(randX(), A.y1, 'walk', t);
       else await go(randX(), A.y1, 'hop', t);
       return;
     }
